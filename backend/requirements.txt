@@ -3,6 +3,6 @@ flask-cors==4.0.0
 tensorflow
 pillow==10.4.0
 numpy
-opencv-python==4.10.0.84
+opencv-python==5.0.0.93
 google-generativeai
 python-dotenv

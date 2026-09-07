@@ -15,7 +15,7 @@ Please read and adhere to our [Code of Conduct](CODE_OF_CONDUCT.md) to keep this
 1. **Fork the repository** on GitHub.
 2. **Clone your fork locally**:
    ```bash
-   git clone https://github.com/your-username/VitalArc.git
+   git clone https://github.com/SHREESABARI-5143/VitalArc.git
    cd VitalArc
    ```
 3. **Create a topic branch**:

@@ -3,7 +3,7 @@
 # 👁️ VitalArc
 ### Next-Generation Ophthalmic Diagnostic & Clinical Decision Support System (CDSS)
 
-[![CI Pipeline](https://github.com/your-username/VitalArc/actions/workflows/ci.yml/badge.svg)](https://github.com/your-username/VitalArc/actions)
+[![CI Pipeline](https://github.com/SHREESABARI-5143/VitalArc/actions/workflows/ci.yml/badge.svg)](https://github.com/SHREESABARI-5143/VitalArc/actions)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 [![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.5-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
@@ -151,7 +151,7 @@ VitalArc/
 
 1. **Clone the repository**:
    ```bash
-   git clone https://github.com/your-username/VitalArc.git
+   git clone https://github.com/SHREESABARI-5143/VitalArc.git
    cd VitalArc
    ```
 

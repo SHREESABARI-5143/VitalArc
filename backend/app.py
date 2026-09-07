@@ -1,16 +1,23 @@
+import os
+import io
+import base64
+import time
+import logging
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 import torch
 from transformers import SegformerConfig, SegformerForImageClassification
 import torchvision.transforms as transforms
-import numpy as np
-from PIL import Image
-import io
-import base64
-import time
-import os
+from PIL import Image, UnidentifiedImageError
 from dotenv import load_dotenv
 import google.generativeai as genai
+
+# Configure structured logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s [%(levelname)s] %(name)s: %(message)s'
+)
+logger = logging.getLogger("VitalArcAPI")
 
 load_dotenv()
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
@@ -19,6 +26,63 @@ if GEMINI_API_KEY:
 
 app = Flask(__name__)
 CORS(app)
+app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16 MB maximum upload payload
+
+# Load model checkpoint safely
+model_path = os.path.join(os.path.dirname(__file__), 'segformer.pth')
+model = None
+CLASS_NAMES = ['Conjunctivitis', 'Pterygium']
+
+try:
+    if os.path.exists(model_path):
+        state_dict = torch.load(model_path, map_location='cpu')
+        num_classes = state_dict['classifier.weight'].shape[0]
+
+        config = SegformerConfig(
+            num_labels=num_classes, 
+            num_channels=3, 
+            depths=[2, 2, 2, 2], 
+            sr_ratios=[8, 4, 2, 1], 
+            hidden_sizes=[32, 64, 160, 256], 
+            patch_sizes=[7, 3, 3, 3], 
+            strides=[4, 2, 2, 2], 
+            num_attention_heads=[1, 2, 5, 8], 
+            mlp_ratios=[4, 4, 4, 4], 
+            hidden_act='gelu', 
+            hidden_dropout_prob=0.0, 
+            attention_probs_dropout_prob=0.0, 
+            classifier_dropout_prob=0.1, 
+            drop_path_rate=0.1, 
+            decoder_hidden_size=256
+        )
+        model = SegformerForImageClassification(config)
+        model.load_state_dict(state_dict)
+        model.eval()
+        CLASS_NAMES = CLASS_NAMES[:num_classes]
+        logger.info("Successfully loaded SegFormer checkpoint.")
+    else:
+        logger.warning(f"Model file not found at {model_path}.")
+except Exception as e:
+    logger.exception(f"Failed to load SegFormer model weights: {e}")
+
+def preprocess_image(image):
+    """Preprocess PIL image for model prediction."""
+    transform = transforms.Compose([
+        transforms.Resize((224, 224)),
+        transforms.ToTensor(),
+        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+    ])
+    return transform(image).unsqueeze(0)
+
+def generate_recommendation(diagnosis):
+    """Generate medical recommendation based on primary diagnosis."""
+    recommendations = {
+        'Normal': 'No significant abnormalities detected. Regular eye checkups recommended.',
+        'Corneal Ulcer': 'URGENT: Immediate ophthalmologist consultation required for proper treatment.',
+        'Pterygium': 'Consult an ophthalmologist for evaluation and management options.',
+        'Conjunctivitis': 'Schedule appointment with eye doctor for proper diagnosis and treatment.'
+    }
+    return recommendations.get(diagnosis['disease'], 'Consult healthcare professional for proper evaluation.')
 
 @app.route('/api/health', methods=['GET'])
 def health_check():
@@ -30,46 +94,6 @@ def health_check():
         'classes': CLASS_NAMES,
         'llm_configured': bool(GEMINI_API_KEY)
     }), 200
-
-# Load your model
-model_path = os.path.join(os.path.dirname(__file__), 'segformer.pth')
-state_dict = torch.load(model_path, map_location='cpu')
-num_classes = state_dict['classifier.weight'].shape[0]
-
-config = SegformerConfig(
-    num_labels=num_classes, 
-    num_channels=3, 
-    depths=[2, 2, 2, 2], 
-    sr_ratios=[8, 4, 2, 1], 
-    hidden_sizes=[32, 64, 160, 256], 
-    patch_sizes=[7, 3, 3, 3], 
-    strides=[4, 2, 2, 2], 
-    num_attention_heads=[1, 2, 5, 8], 
-    mlp_ratios=[4, 4, 4, 4], 
-    hidden_act='gelu', 
-    hidden_dropout_prob=0.0, 
-    attention_probs_dropout_prob=0.0, 
-    classifier_dropout_prob=0.1, 
-    drop_path_rate=0.1, 
-    decoder_hidden_size=256
-)
-model = SegformerForImageClassification(config)
-model.load_state_dict(state_dict)
-model.eval()
-
-# Define disease classes based on the model's output classes
-USER_CLASSES = ['Conjunctivitis', 'Pterygium']
-CLASS_NAMES = USER_CLASSES[:num_classes]
-
-def preprocess_image(image):
-    """Preprocess the image for model prediction"""
-    transform = transforms.Compose([
-        transforms.Resize((224, 224)),
-        transforms.ToTensor(),
-        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
-    ])
-    image_tensor = transform(image).unsqueeze(0)
-    return image_tensor
 
 @app.route('/api/ask-llm', methods=['POST'])
 def ask_llm():
@@ -106,35 +130,53 @@ Instructions:
         return jsonify({'answer': response.text})
         
     except Exception as e:
-        return jsonify({'error': f'Clinical Assistant error: {str(e)}'}), 500
+        logger.exception(f"Error handling clinical assistant request: {e}")
+        return jsonify({'error': 'Unable to complete clinical assistant request. Please try again later.'}), 500
 
 @app.route('/api/predict', methods=['POST'])
 def predict():
     try:
         start_time = time.time()
         
-        # Get image from request
+        # Validate model readiness
+        if model is None:
+            logger.error("Predict endpoint called but model is not loaded.")
+            return jsonify({'error': 'Classification model is currently unavailable.'}), 503
+
+        # Extract image from request safely
+        image = None
         if 'file' in request.files:
             file = request.files['file']
-            image = Image.open(file.stream)
-        elif 'image' in request.json:
-            image_data = request.json['image'].split(',')[1]
-            image = Image.open(io.BytesIO(base64.b64decode(image_data)))
+            if not file or file.filename == '':
+                return jsonify({'error': 'No selected file in upload'}), 400
+            try:
+                image = Image.open(file.stream)
+            except (UnidentifiedImageError, OSError, ValueError):
+                return jsonify({'error': 'Invalid or corrupted image format. Please upload a valid JPEG, PNG, or WebP image.'}), 400
+        elif request.is_json and 'image' in (request.json or {}):
+            try:
+                raw_image_data = request.json['image']
+                if ',' in raw_image_data:
+                    raw_image_data = raw_image_data.split(',')[1]
+                image_bytes = base64.b64decode(raw_image_data)
+                image = Image.open(io.BytesIO(image_bytes))
+            except Exception:
+                return jsonify({'error': 'Invalid base64 image encoding provided.'}), 400
         else:
-            return jsonify({'error': 'No image provided'}), 400
+            return jsonify({'error': 'No image provided in request'}), 400
 
-        # Convert to RGB if needed
+        # Convert to RGB
         if image.mode != 'RGB':
             image = image.convert('RGB')
 
-        # Preprocess and make prediction
+        # Preprocess and infer
         processed_image = preprocess_image(image)
         with torch.no_grad():
             outputs = model(processed_image)
             logits = outputs.logits
-            confidence_scores = torch.nn.functional.softmax(logits, dim=-1)[0].numpy()
+            confidence_scores = torch.nn.functional.softmax(logits, dim=-1)[0].tolist()
         
-        # Process results
+        # Build predictions
         results = []
         for i, disease in enumerate(CLASS_NAMES):
             confidence = confidence_scores[i]
@@ -148,31 +190,22 @@ def predict():
         primary_diagnosis = results[0]
         processing_time = round(time.time() - start_time, 2)
         
-        response = {
+        return jsonify({
             'predictions': results,
             'primaryDiagnosis': primary_diagnosis['disease'],
             'confidence': primary_diagnosis['confidence'],
             'recommendation': generate_recommendation(primary_diagnosis),
             'processingTime': processing_time,
             'message': 'Analysis completed successfully'
-        }
-        
-        return jsonify(response)
+        }), 200
         
     except Exception as e:
-        return jsonify({'error': f'Processing error: {str(e)}'}), 500
-
-def generate_recommendation(diagnosis):
-    """Generate medical recommendation based on diagnosis"""
-    recommendations = {
-        'Normal': 'No significant abnormalities detected. Regular eye checkups recommended.',
-        'Corneal Ulcer': 'URGENT: Immediate ophthalmologist consultation required for proper treatment.',
-        'Pterygium': 'Consult an ophthalmologist for evaluation and management options.',
-        'Conjunctivitis': 'Schedule appointment with eye doctor for proper diagnosis and treatment.'
-    }
-    return recommendations.get(diagnosis['disease'], 'Consult healthcare professional.')
-
+        logger.exception(f"Error during image analysis: {e}")
+        return jsonify({'error': 'Image analysis failed due to an internal server error.'}), 500
 
 
 if __name__ == '__main__':
-    app.run(debug=True, port=5001)
+    debug_mode = os.getenv('FLASK_DEBUG', 'false').lower() in ('true', '1', 't')
+    port = int(os.getenv('PORT', 5001))
+    host = os.getenv('HOST', '0.0.0.0')
+    app.run(host=host, port=port, debug=debug_mode)

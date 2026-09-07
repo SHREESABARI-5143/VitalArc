@@ -37,6 +37,12 @@ class TestMLTransforms(unittest.TestCase):
         tensor = preprocess_fundus_image(img_gray, image_size=(224, 224))
         self.assertEqual(tensor.shape, (1, 3, 224, 224))
 
+    def test_inference_transforms_composition(self):
+        """Verify get_inference_transforms produces valid torchvision Compose object."""
+        pipeline = get_inference_transforms((224, 224))
+        self.assertIsNotNone(pipeline)
+        self.assertEqual(len(pipeline.transforms), 3)
+
 
 if __name__ == '__main__':
     unittest.main()

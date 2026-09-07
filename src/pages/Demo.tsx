@@ -178,7 +178,7 @@ export default function Demo() {
       if (previewUrl) {
         const storedImage = {
           id: Date.now().toString(),
-          fileName: selectedFile.name,
+          fileName: selectedFile.name.replace(/[^a-zA-Z0-9._ -]/g, '_'),
           disease: processedData.primaryDiagnosis,
           confidence: processedData.confidence,
           timestamp: new Date().toISOString(),

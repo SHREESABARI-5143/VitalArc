@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Folder, FileImage, Download, Trash2, Database, X, BarChart3, PieChart } from 'lucide-react';
 
 interface StoredImage {
@@ -11,8 +11,8 @@ interface StoredImage {
 }
 
 // Strict image URL validation to prevent DOM XSS and unsafe HTML reinterpretation
-function validateSafeImageUrl(rawUrl: unknown): string {
-  if (typeof rawUrl !== 'string') return '';
+function validateSafeImageUrl(rawUrl: unknown): string | null {
+  if (typeof rawUrl !== 'string') return null;
   const trimmed = rawUrl.trim();
   
   // 1. Strict Base64 image data URI format (jpeg, png, webp, gif)
@@ -20,32 +20,41 @@ function validateSafeImageUrl(rawUrl: unknown): string {
     return trimmed;
   }
 
-  // 2. Blob protocol
+  // 2. Blob protocol validation
   if (trimmed.startsWith('blob:')) {
     try {
       const parsed = new URL(trimmed);
       if (parsed.protocol === 'blob:') {
-        return trimmed;
-      }
-    } catch {
-      return '';
-    }
-  }
-
-  // 3. HTTP / HTTPS protocols
-  if (trimmed.startsWith('https://') || trimmed.startsWith('http://')) {
-    try {
-      const parsed = new URL(trimmed);
-      if (parsed.protocol === 'https:' || parsed.protocol === 'http:') {
         return parsed.href;
       }
     } catch {
-      return '';
+      return null;
     }
   }
 
-  return '';
+  // 3. HTTPS protocol validation
+  if (trimmed.startsWith('https://')) {
+    try {
+      const parsed = new URL(trimmed);
+      if (parsed.protocol === 'https:') {
+        return parsed.href;
+      }
+    } catch {
+      return null;
+    }
+  }
+
+  return null;
 }
+
+// Sanitize filename to prevent directory traversal or script injection
+function sanitizeFilename(name: unknown): string {
+  if (typeof name !== 'string') return 'eye_image.jpg';
+  const cleaned = name.replace(/[^a-zA-Z0-9._ -]/g, '_').trim();
+  return cleaned.length > 0 ? cleaned : 'eye_image.jpg';
+}
+
+const DISEASES = ['all', 'Normal', 'Corneal Ulcer', 'Pterygium', 'Conjunctivitis'] as const;
 
 export default function Data() {
   const [storedImages, setStoredImages] = useState<StoredImage[]>([]);
@@ -61,11 +70,11 @@ export default function Data() {
           const validatedList: StoredImage[] = parsed
             .filter((item): item is Record<string, unknown> => Boolean(item && typeof item === 'object'))
             .map((item) => {
-              const safeUrl = validateSafeImageUrl(item.imageUrl);
+              const safeUrl = validateSafeImageUrl(item.imageUrl) || '';
               return {
                 id: String(item.id || Date.now()),
-                fileName: String(item.fileName || 'eye_image.jpg').replace(/[^a-zA-Z0-9._-]/g, '_'),
-                disease: String(item.disease || 'Unknown'),
+                fileName: sanitizeFilename(item.fileName),
+                disease: String(item.disease || 'Unknown').replace(/[^a-zA-Z0-9 -]/g, ''),
                 confidence: typeof item.confidence === 'number' ? item.confidence : 0,
                 timestamp: String(item.timestamp || new Date().toISOString()),
                 imageUrl: safeUrl
@@ -86,21 +95,24 @@ export default function Data() {
     return () => window.removeEventListener('storage', loadStoredImages);
   }, [loadStoredImages]);
 
-  const diseases = ['all', 'Normal', 'Corneal Ulcer', 'Pterygium', 'Conjunctivitis'];
-  const filteredImages = selectedDisease === 'all' 
-    ? storedImages 
-    : storedImages.filter(img => img.disease === selectedDisease);
+  const filteredImages = useMemo(() => {
+    return selectedDisease === 'all' 
+      ? storedImages 
+      : storedImages.filter(img => img.disease === selectedDisease);
+  }, [selectedDisease, storedImages]);
 
-  // Simple BI Analysis
-  const diseaseStats = diseases
-    .filter(d => d !== 'all')
-    .map(disease => {
-      const diseaseImages = storedImages.filter(img => img.disease === disease);
-      const count = diseaseImages.length;
-      const percentage = storedImages.length > 0 ? (count / storedImages.length) * 100 : 0;
-      return { disease, count, percentage };
-    })
-    .filter(stat => stat.count > 0);
+  // BI Analysis
+  const diseaseStats = useMemo(() => {
+    return DISEASES
+      .filter(d => d !== 'all')
+      .map(disease => {
+        const diseaseImages = storedImages.filter(img => img.disease === disease);
+        const count = diseaseImages.length;
+        const percentage = storedImages.length > 0 ? (count / storedImages.length) * 100 : 0;
+        return { disease, count, percentage };
+      })
+      .filter(stat => stat.count > 0);
+  }, [storedImages]);
 
   const downloadBIPDF = () => {
     const reportContent = `
@@ -116,17 +128,17 @@ ${diseaseStats.map(stat => `${stat.disease}: ${stat.count} cases (${stat.percent
 Total Cases: ${storedImages.length}
 Normal Cases: ${storedImages.filter(img => img.disease === 'Normal').length}
 Abnormal Cases: ${storedImages.filter(img => img.disease !== 'Normal').length}
-    `;
+    `.trim();
 
-    const blob = new Blob([reportContent], { type: 'application/pdf' });
-    const url = URL.createObjectURL(blob);
+    const blob = new Blob([reportContent], { type: 'text/plain' });
+    const blobUrl = URL.createObjectURL(blob);
     const link = document.createElement('a');
-    link.href = url;
-    link.download = `Eye_Disease_BI_Analysis_${Date.now()}.pdf`;
+    link.href = blobUrl;
+    link.download = `Eye_Disease_BI_Analysis_${Date.now()}.txt`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-    URL.revokeObjectURL(url);
+    URL.revokeObjectURL(blobUrl);
   };
 
   const deleteImage = (id: string) => {
@@ -139,7 +151,7 @@ Abnormal Cases: ${storedImages.filter(img => img.disease !== 'Normal').length}
     const safeUrl = validateSafeImageUrl(image.imageUrl);
     if (!safeUrl) return;
 
-    const safeFileName = `${image.disease || 'eye'}_${image.fileName}`;
+    const safeFileName = `${sanitizeFilename(image.disease)}_${sanitizeFilename(image.fileName)}`;
 
     if (safeUrl.startsWith('data:image/')) {
       try {
@@ -165,35 +177,35 @@ Abnormal Cases: ${storedImages.filter(img => img.disease !== 'Normal').length}
       } catch (err) {
         console.error('Error creating image download blob:', err);
       }
+    } else if (safeUrl.startsWith('blob:')) {
+      const link = document.createElement('a');
+      link.href = safeUrl;
+      link.download = safeFileName;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
     }
-
-    const link = document.createElement('a');
-    link.href = safeUrl;
-    link.download = safeFileName;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
   };
 
   const downloadReport = (image: StoredImage) => {
     const reportContent = `
 EYE DISEASE DETECTION REPORT
 ============================
-File Name: ${image.fileName}
-Detected Disease: ${image.disease}
+File Name: ${sanitizeFilename(image.fileName)}
+Detected Disease: ${sanitizeFilename(image.disease)}
 Confidence: ${image.confidence.toFixed(2)}%
 Analysis Date: ${new Date(image.timestamp).toLocaleString()}
-    `;
+    `.trim();
 
     const blob = new Blob([reportContent], { type: 'text/plain' });
-    const url = URL.createObjectURL(blob);
+    const blobUrl = URL.createObjectURL(blob);
     const link = document.createElement('a');
-    link.href = url;
-    link.download = `Eye_Report_${image.disease}_${Date.now()}.txt`;
+    link.href = blobUrl;
+    link.download = `Eye_Report_${sanitizeFilename(image.disease)}_${Date.now()}.txt`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-    URL.revokeObjectURL(url);
+    URL.revokeObjectURL(blobUrl);
   };
 
   const clearAllData = () => {
@@ -202,6 +214,8 @@ Analysis Date: ${new Date(image.timestamp).toLocaleString()}
       localStorage.removeItem('eyeDiseaseImages');
     }
   };
+
+  const selectedSafeUrl = selectedImage ? validateSafeImageUrl(selectedImage.imageUrl) : null;
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -257,7 +271,7 @@ Analysis Date: ${new Date(image.timestamp).toLocaleString()}
                 className="flex items-center space-x-2 bg-cyan-500 hover:bg-cyan-600 text-white px-4 py-2 rounded-lg transition-colors"
               >
                 <Download className="w-4 h-4" />
-                <span>Download BI Report (PDF)</span>
+                <span>Download BI Report</span>
               </button>
             </div>
 
@@ -318,7 +332,7 @@ Analysis Date: ${new Date(image.timestamp).toLocaleString()}
                 onChange={(e) => setSelectedDisease(e.target.value)}
                 className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500"
               >
-                {diseases.map(disease => (
+                {DISEASES.map(disease => (
                   <option key={disease} value={disease}>
                     {disease === 'all' ? 'All Images' : disease}
                   </option>
@@ -358,7 +372,7 @@ Analysis Date: ${new Date(image.timestamp).toLocaleString()}
                     {safeImgUrl ? (
                       <img 
                         src={safeImgUrl} 
-                        alt={image.fileName}
+                        alt={sanitizeFilename(image.fileName)}
                         className="w-full h-48 object-cover cursor-pointer"
                         onClick={() => setSelectedImage(image)}
                       />
@@ -426,7 +440,7 @@ Analysis Date: ${new Date(image.timestamp).toLocaleString()}
           <div className="bg-white rounded-2xl max-w-4xl max-h-[90vh] overflow-auto">
             <div className="p-6">
               <div className="flex justify-between items-center mb-4">
-                <h3 className="text-xl font-bold text-slate-900">{selectedImage.fileName}</h3>
+                <h3 className="text-xl font-bold text-slate-900">{sanitizeFilename(selectedImage.fileName)}</h3>
                 <button
                   onClick={() => setSelectedImage(null)}
                   className="text-gray-500 hover:text-gray-700"
@@ -437,10 +451,10 @@ Analysis Date: ${new Date(image.timestamp).toLocaleString()}
               
               <div className="grid md:grid-cols-2 gap-6">
                 <div>
-                  {validateSafeImageUrl(selectedImage.imageUrl) ? (
+                  {selectedSafeUrl ? (
                     <img 
-                      src={validateSafeImageUrl(selectedImage.imageUrl)} 
-                      alt={selectedImage.fileName}
+                      src={selectedSafeUrl} 
+                      alt={sanitizeFilename(selectedImage.fileName)}
                       className="w-full rounded-lg shadow-lg"
                     />
                   ) : (

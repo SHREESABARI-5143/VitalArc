@@ -1,29 +1,35 @@
 <div align="center">
 
 # 👁️ VitalArc
-### Next-Generation Ophthalmic Diagnostic & Clinical Decision Support System (CDSS)
+### AI-Assisted Ophthalmic Screening & Clinical Decision Support System (CDSS) Prototype
 
-[![CI Pipeline](https://github.com/SHREESABARI-5143/VitalArc/actions/workflows/ci.yml/badge.svg)](https://github.com/SHREESABARI-5143/VitalArc/actions)
+[![CI Pipeline](https://github.com/SHREESABARI-5143/VitalArc/actions/workflows/ci.yml/badge.svg)](https://github.com/SHREESABARI-5143/VitalArc/actions/workflows/ci.yml)
+[![CodeQL](https://github.com/SHREESABARI-5143/VitalArc/actions/workflows/codeql.yml/badge.svg)](https://github.com/SHREESABARI-5143/VitalArc/actions/workflows/codeql.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 [![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.5-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 [![React](https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=black)](https://react.dev/)
 [![Docker](https://img.shields.io/badge/Docker-Ready-2496ED?logo=docker&logoColor=white)](https://www.docker.com/)
 
-[Key Features](#-key-features) • [System Architecture](#-system-architecture) • [Getting Started](#-getting-started) • [API Reference](#-api-reference) • [Model Benchmarks](#-model-benchmarks) • [Roadmap](#-roadmap)
+[System Overview](#-system-overview) • [Architecture](#-system-architecture) • [Verified Capabilities](#-verified-capabilities) • [API Specification](#-verified-api-specification) • [Local Setup](#-local-development-setup) • [Docker](#-docker-orchestration) • [Verification & Testing](#-testing--quality-gate)
 
 </div>
 
 ---
 
-## 📌 Overview
+> ⚠️ **MEDICAL & CLINICAL DISCLAIMER**:  
+> **VitalArc is a research and clinical decision-support prototype** designed for preliminary screening assistance and investigational decision support. **It does not provide definitive medical diagnoses, guarantee clinical outcomes, or replace the expertise, examination, or clinical judgment of a licensed ophthalmologist or healthcare provider.** All screening observations must be evaluated by a certified medical specialist.
 
-**VitalArc** is an end-to-end Clinical Decision Support System (CDSS) built to assist clinicians and ophthalmologists in rapid, automated screening and diagnosis of retinal and ocular pathologies (such as Diabetic Retinopathy, Glaucoma, Cataracts, and Age-Related Macular Degeneration) from fundus photography and optical coherence tomography (OCT).
+---
 
-By coupling **hybrid deep vision networks (CNN + SegFormer)** with an **evidence-based Clinical Retrieval-Augmented Generation (RAG) assistant**, VitalArc provides:
-1. **Multi-class Pathology Classification**: High-confidence detection across 4+ ocular conditions.
-2. **Visual Explainability (Grad-CAM & Segmentation)**: Saliency heatmaps and retinal vessel/lesion localization for diagnostic interpretability.
-3. **Clinical Guidance Engine**: Contextual, guideline-backed diagnostic recommendations powered by clinical LLM and PubMed RAG indexing.
+## 📌 System Overview
+
+**VitalArc** is an end-to-end clinical decision-support system (CDSS) prototype engineered to assist clinical workflows in evaluating anterior segment and retinal ocular conditions. 
+
+The platform combines:
+1. **Deep Vision Image Classification**: Transformer-based vision classification (`SegformerForImageClassification`) for anterior segment ocular condition evaluation.
+2. **Clinical Copilot Assistant**: Contextual medical assistance powered by Google Generative AI with clinical guidance and medical disclaimer enforcement.
+3. **Clinical Web Portal**: A responsive React 18 & TypeScript frontend providing image upload, real-time confidence scores, clinical triage recommendations, and structured patient screening reports.
 
 ---
 
@@ -31,157 +37,166 @@ By coupling **hybrid deep vision networks (CNN + SegFormer)** with an **evidence
 
 ```mermaid
 flowchart TD
-    subgraph Client ["Frontend (React 18 + TypeScript + Tailwind)"]
-        UI[Clinical Web Interface]
-        Upload[Fundus Image & Patient Ingestion]
-        Visualizer[Grad-CAM & Segmentation Viewer]
+    subgraph Client ["Frontend (React 18 + TypeScript + Vite + Tailwind)"]
+        UI[Clinical Portal UI]
+        Upload[Anterior / Fundus Image Ingestion]
+        Report[Diagnostic Summary & Q&A Assistant]
     end
 
-    subgraph Backend_Gateway ["Core Backend (Flask / REST API)"]
-        Router["/api/v1 Router"]
-        Preproc[Image Normalization & CLAHE]
-        RAGRouter["/api/ask-llm RAG Controller"]
+    subgraph Gateway ["Backend REST Service (Python / Flask :5001)"]
+        HealthRouter["GET /api/health"]
+        PredictRouter["POST /api/predict"]
+        LLMRouter["POST /api/ask-llm"]
+        Preproc[Image Preprocessing & Normalization]
     end
 
-    subgraph DL_Engine ["Deep Vision & Inference Engine"]
-        CNN[Hybrid CNN Classification Model]
-        Seg[SegFormer Lesion Segmentation]
-        GradCAM[Explainability / Grad-CAM Generator]
+    subgraph ML_Subsystem ["Machine Learning Inference Pipeline"]
+        Model[SegFormer Vision Transformer / segformer.pth]
+        Softmax[Multi-class Softmax & Triage Logic]
     end
 
-    subgraph Knowledge_Base ["Clinical RAG Subsystem"]
-        VectorDB[(Ophthalmic Guidelines & Clinical Embeddings)]
-        LLM[Gemini / Clinical LLM Synthesis Engine]
+    subgraph LLM_Service ["Clinical Guidance Engine"]
+        GenAI[Google Generative AI / Gemini Engine]
+        Guardrails[Medical Disclaimer & Escalation Guardrails]
     end
 
-    Upload --> Router
-    Router --> Preproc
-    Preproc --> CNN & Seg
-    CNN --> GradCAM
-    GradCAM --> Visualizer
-    CNN & Seg --> RAGRouter
-    RAGRouter --> VectorDB
-    VectorDB --> LLM
-    LLM --> UI
+    Upload --> PredictRouter
+    PredictRouter --> Preproc --> Model --> Softmax --> UI
+    Report --> LLMRouter
+    LLMRouter --> Guardrails --> GenAI --> UI
+    UI -.-> HealthRouter
 ```
 
 ---
 
-## ✨ Key Features
+## ✨ Verified Capabilities
 
-- **High-Precision Multi-Class Classification**: Trained and fine-tuned on standardized fundus datasets.
-- **Explainable AI (XAI)**: Integrated Grad-CAM heatmaps highlight microaneurysms, hemorrhages, and optic disc anomalies to eliminate the "black-box" dilemma.
-- **Clinical Copilot (RAG)**: Conversational assistant contextualized to the specific diagnosis, providing triage urgency, differential diagnosis, and recommended clinical interventions.
-- **Enterprise-Grade Monorepo Structure**: Strict modular decoupling across frontend, backend API, ML training/inference, and RAG pipelines.
-- **Containerized & CI/CD Ready**: Docker Compose orchestration and automated GitHub Actions test pipelines.
-
----
-
-## 🛠️ Tech Stack Matrix
-
-| Domain | Technology Stack |
-| :--- | :--- |
-| **Frontend UI/UX** | React 18, TypeScript, Vite, Tailwind CSS, Lucide React |
-| **Backend REST API** | Python 3.10+, Flask, Flask-CORS, Pillow, OpenCV |
-| **Deep Learning & CV** | PyTorch, TensorFlow / Keras, SegFormer, Albumentations, Grad-CAM |
-| **RAG & GenAI** | Google Generative AI (Gemini), LangChain / FAISS, PubMedBERT |
-| **Testing & Quality** | Pytest, Vitest, ESLint, TypeScript Compiler (`tsc`), Pre-commit |
-| **DevOps & Deploy** | Docker, Docker Compose, GitHub Actions, NGINX |
+- **Anterior Segment Ocular Screening**: Evaluates anterior eye images against trained target classes (`Conjunctivitis`, `Pterygium`).
+- **Probabilistic Severity Triage**: Maps softmax confidence scores to clinical urgency tiers (`High`, `Moderate`, `Low`) with condition-specific referral guidance.
+- **Interactive Clinical Q&A**: Answers patient questions about symptoms, contagiousness, and referral urgency with strict professional disclaimer enforcement.
+- **Local Storage Audit Trail**: Tracks and persists recent screening sessions for patient record review.
+- **Enterprise Monorepo Engineering**: Clean separation of frontend client, backend REST services, ML pipeline modules, and RAG evaluation suites.
 
 ---
 
-## 📁 Repository Structure
+## 🛠️ Technology Stack
 
+| Subsystem | Technology | Purpose |
+| :--- | :--- | :--- |
+| **Frontend UI** | React 18, TypeScript 5.5, Vite 5, Tailwind CSS | Clinical practitioner user interface |
+| **Icons & Design** | Lucide React, Modern CSS Design Tokens | Medical dashboard visualization |
+| **Backend API** | Python 3.10+, Flask 2.3, Flask-CORS | REST API gateway on port `5001` |
+| **Deep Learning** | PyTorch, Hugging Face Transformers (`Segformer`) | Vision transformer image classification |
+| **Image Processing** | Pillow (PIL), Torchvision Transforms | Image resizing (224x224) and ImageNet normalization |
+| **Clinical GenAI** | Google Generative AI (`gemini-flash-latest`) | Clinical reasoning and patient FAQ copilot |
+| **Security & Quality** | GitHub Actions CI, CodeQL, Flake8, Python Unittest | Automated security scanning and static analysis |
+
+---
+
+## 📡 Verified API Specification
+
+### 1. Service Health Check
+```http
+GET /api/health
 ```
-VitalArc/
-├── .github/
-│   ├── ISSUE_TEMPLATE/          # Bug report and feature request issue templates
-│   ├── workflows/               # GitHub Actions CI/CD workflows
-│   ├── dependabot.yml           # Automated dependency scanning
-│   └── PULL_REQUEST_TEMPLATE.md # Standardized PR review template
-├── backend/                     # Python REST API & inference server
-│   ├── app/                     # Modular API routers & core services
-│   ├── tests/                   # Pytest test suite
-│   ├── eye_cnn_model.h5         # Pre-trained CNN weights
-│   ├── segformer.pth            # Pre-trained SegFormer weights
-│   ├── app.py                   # Main Flask entrypoint
-│   ├── requirements.txt         # Production dependencies
-│   └── Dockerfile               # Backend container definition
-├── ml/                          # Machine Learning R&D workspace
-│   ├── architectures/           # Model definitions (CNN, ViT, SegFormer)
-│   ├── explainability/          # Grad-CAM and saliency algorithms
-│   ├── inference/               # Optimized runtime execution
-│   ├── preprocessing/           # Clinical image augmentation & CLAHE
-│   └── training/                # Training pipelines & evaluation metrics
-├── rag/                         # Clinical Retrieval-Augmented Generation
-│   ├── chunking/                # Document splitting strategies
-│   ├── embeddings/              # Medical embedding models
-│   ├── generation/              # Clinical prompt templates & LLM synthesis
-│   ├── ingestion/               # Guideline document parsers
-│   └── retrieval/               # Vector similarity search engine
-├── src/                         # React 18 + TypeScript Frontend application
-│   ├── components/              # Modular UI components & Navigation
-│   ├── pages/                   # View pages (Home, Model, Demo, Workflow, Data)
-│   ├── index.css                # Design system styling
-│   └── App.tsx                  # Main root view router
-├── deploy/                      # Deployment and reverse proxy configs
-│   ├── docker-compose.yml       # Production/development multi-container setup
-│   └── nginx.conf               # NGINX gateway configuration
-├── .env.example                 # Environment variables blueprint
-├── .gitignore                   # Git ignore configurations
-├── .pre-commit-config.yaml      # Code formatting & linting hooks
-├── CONTRIBUTING.md               # SDE contribution guidelines
-├── CODE_OF_CONDUCT.md           # Contributor Covenant standard
-├── SECURITY.md                  # Security and vulnerability reporting
-├── LICENSE                      # MIT Open-Source License
-└── README.md                    # Main project documentation
+**Response (200 OK):**
+```json
+{
+  "status": "healthy",
+  "service": "VitalArc Diagnostic API",
+  "version": "1.0.0",
+  "model_loaded": true,
+  "classes": ["Conjunctivitis", "Pterygium"],
+  "llm_configured": true
+}
 ```
 
 ---
 
-## 🚀 Getting Started
+### 2. Ocular Image Screening
+```http
+POST /api/predict
+Content-Type: multipart/form-data  (or application/json with base64)
+```
+**Request:**
+- `file`: Image binary (JPEG, PNG, WebP) **OR**
+- `image`: Base64 data URI string (`data:image/jpeg;base64,...`)
+
+**Response (200 OK):**
+```json
+{
+  "primaryDiagnosis": "Conjunctivitis",
+  "confidence": 94.2,
+  "predictions": [
+    {
+      "disease": "Conjunctivitis",
+      "confidence": 94.2,
+      "severity": "High"
+    },
+    {
+      "disease": "Pterygium",
+      "confidence": 5.8,
+      "severity": "Low"
+    }
+  ],
+  "recommendation": "Schedule appointment with eye doctor for proper diagnosis and treatment.",
+  "processingTime": 0.05,
+  "message": "Analysis completed successfully"
+}
+```
+
+---
+
+### 3. Clinical Copilot Q&A
+```http
+POST /api/ask-llm
+Content-Type: application/json
+```
+**Request:**
+```json
+{
+  "question": "Is this condition contagious?",
+  "diagnosis": "Conjunctivitis",
+  "confidence": 94.2,
+  "recommendation": "Schedule appointment with eye doctor."
+}
+```
+**Response (200 OK):**
+```json
+{
+  "answer": "• Viral and bacterial conjunctivitis are highly contagious...\n• Avoid touching your eyes and wash hands frequently.\n• Please consult a licensed eye doctor for definitive medical evaluation."
+}
+```
+
+---
+
+## 🚀 Local Development Setup
 
 ### Prerequisites
-- **Docker & Docker Compose** (Recommended) *OR*
-- **Node.js >= 18** and **Python >= 3.10**
+- **Node.js** >= 18.x
+- **Python** >= 3.10.x
+- **Git**
+
+### 1. Clone & Configure Environment
+```bash
+git clone https://github.com/SHREESABARI-5143/VitalArc.git
+cd VitalArc
+
+# Copy environment configuration
+cp .env.example .env
+```
+Configure your `GEMINI_API_KEY` in `.env` if using the clinical assistant copilot.
 
 ---
 
-### Method 1: Running with Docker (Recommended)
-
-1. **Clone the repository**:
-   ```bash
-   git clone https://github.com/SHREESABARI-5143/VitalArc.git
-   cd VitalArc
-   ```
-
-2. **Configure Environment Variables**:
-   ```bash
-   cp .env.example .env
-   # Add your GEMINI_API_KEY in .env
-   ```
-
-3. **Launch all services**:
-   ```bash
-   docker-compose up --build
-   ```
-
-4. **Access Applications**:
-   - **Frontend UI**: [http://localhost:5173](http://localhost:5173)
-   - **Backend API**: [http://localhost:5001](http://localhost:5001)
-
----
-
-### Method 2: Manual Local Setup
-
-#### 1. Backend Service
+### 2. Backend Service Setup
 ```bash
 cd backend
 python -m venv .venv
 
 # On Windows:
 .venv\Scripts\activate
-# On macOS/Linux:
+# On Linux / macOS:
 # source .venv/bin/activate
 
 pip install -r requirements.txt
@@ -189,9 +204,11 @@ python app.py
 ```
 *Backend runs on `http://localhost:5001`.*
 
-#### 2. Frontend Web Application
+---
+
+### 3. Frontend Web Client Setup
 ```bash
-# In the project root directory
+# In the repository root directory
 npm install
 npm run dev
 ```
@@ -199,101 +216,57 @@ npm run dev
 
 ---
 
-## 📡 API Reference
+## 🐳 Docker Orchestration
 
-### Health Check
-```http
-GET /api/health
-```
-**Response:**
-```json
-{
-  "status": "healthy",
-  "models_loaded": {
-    "classifier": true,
-    "segformer": true
-  }
-}
-```
-
-### Predict Disease from Fundus Image
-```http
-POST /api/predict
-Content-Type: multipart/form-data
-```
-| Parameter | Type | Description |
-| :--- | :--- | :--- |
-| `file` | `File` (PNG/JPG) | Fundus photograph of retina |
-
-**Response:**
-```json
-{
-  "diagnosis": "Diabetic Retinopathy",
-  "confidence": 97.4,
-  "recommendations": "Urgent ophthalmology referral required for anti-VEGF / laser photocoagulation evaluation.",
-  "gradcam": "data:image/png;base64,...",
-  "processing_time": 0.048
-}
-```
-
-### Clinical RAG Copilot
-```http
-POST /api/ask-llm
-Content-Type: application/json
-```
-```json
-{
-  "question": "What is the recommended screening interval for mild non-proliferative diabetic retinopathy?",
-  "diagnosis": "Diabetic Retinopathy",
-  "confidence": 97.4,
-  "recommendation": "Urgent ophthalmology referral"
-}
-```
-
----
-
-## 🧪 Testing & Code Quality
+Run both frontend and backend in isolated containers:
 
 ```bash
-# Execute TypeScript strict typecheck
+docker compose up --build
+```
+- **Web App**: `http://localhost:5173`
+- **Backend API**: `http://localhost:5001`
+
+---
+
+## 🧪 Testing & Quality Gate
+
+```bash
+# Frontend static type checking
 npm run typecheck
 
-# Run Frontend ESLint analysis
+# Frontend ESLint verification
 npm run lint
 
-# Execute backend pytest unit tests
-pytest backend/tests/
+# Frontend production bundle build
+npm run build
+
+# Backend unit test suite
+python -m unittest discover backend/tests -v
 ```
 
 ---
 
-## 📊 Model Benchmarks
+## 📊 Model Evaluation & Benchmarks
 
-| Model Architecture | Parameter Count | Accuracy | Sensitivity (Recall) | Specificity | AUC-ROC | Latency |
-| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| **VitalArc Hybrid CNN** | 14.8M | **96.4%** | **95.8%** | **97.1%** | **0.988** | 42 ms |
-| **SegFormer-B0 (Lesion)** | 3.7M | **93.2% mIoU** | **94.5%** | **96.0%** | **0.979** | 68 ms |
-
----
-
-## 🗺️ Roadmap
-
-- [x] Hybrid CNN classification with 4-class ocular pathology detection
-- [x] Visual explainability with Grad-CAM heatmaps
-- [x] Clinical RAG integration with LLM Copilot
-- [x] SDE monorepo refactor and CI/CD GitHub Actions
-- [ ] ONNX runtime & TensorRT acceleration for edge-device deployment
-- [ ] DICOM image ingestion support and PACS server integration
-- [ ] Real-time multi-modal medical audio report generation
+| Parameter | Specification | Verification Status |
+| :--- | :--- | :--- |
+| **Model Architecture** | `SegformerForImageClassification` | Verified in `backend/app.py` |
+| **Weights Checkpoint** | `segformer.pth` (13.3 MB) | Verified in `backend/` |
+| **Input Dimensions** | `(3, 224, 224)` RGB | Verified in `transforms.py` |
+| **Output Classes** | `Conjunctivitis`, `Pterygium` | Verified in `app.py` state dict |
+| **Benchmark Metrics (Accuracy / F1 / AUC)** | *Standardized Multi-Center Evaluation* | **To be verified on holdout clinical test set** |
 
 ---
 
-## 🤝 Contributing
+## 🔒 Security Configuration
 
-Contributions make the open-source community thrive. Please review [`CONTRIBUTING.md`](CONTRIBUTING.md) for our code standards, branching model, and PR guidelines.
+- **Zero Hardcoded Secrets**: Secrets and API tokens are strictly loaded via `.env` and environment variables.
+- **CodeQL Scanning**: Automated static application security testing enabled in `.github/workflows/codeql.yml`.
+- **Pre-commit Hooks**: Enforces clean formatting, syntax validity, and size limits via `.pre-commit-config.yaml`.
+- **Vulnerability Reporting**: See [`SECURITY.md`](SECURITY.md) for reporting guidelines.
 
 ---
 
 ## 📜 License
 
-Distributed under the **MIT License**. See [`LICENSE`](LICENSE) for more information.
+Distributed under the **MIT License**. See [`LICENSE`](LICENSE) for complete details.

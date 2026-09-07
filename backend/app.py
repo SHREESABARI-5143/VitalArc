@@ -13,8 +13,9 @@ from dotenv import load_dotenv
 import google.generativeai as genai
 
 load_dotenv()
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "AIzaSyArlQqO4IJlkgGX1N5zmW0mXJoeJfiUB9U")
-genai.configure(api_key=GEMINI_API_KEY)
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
+if GEMINI_API_KEY:
+    genai.configure(api_key=GEMINI_API_KEY)
 
 app = Flask(__name__)
 CORS(app)
@@ -26,7 +27,8 @@ def health_check():
         'service': 'VitalArc Diagnostic API',
         'version': '1.0.0',
         'model_loaded': model is not None,
-        'classes': CLASS_NAMES
+        'classes': CLASS_NAMES,
+        'llm_configured': bool(GEMINI_API_KEY)
     }), 200
 
 # Load your model
@@ -72,14 +74,22 @@ def preprocess_image(image):
 @app.route('/api/ask-llm', methods=['POST'])
 def ask_llm():
     try:
-        data = request.json
+        data = request.json or {}
         question = data.get('question')
-        diagnosis = data.get('diagnosis')
-        confidence = data.get('confidence')
-        recommendation = data.get('recommendation')
+        diagnosis = data.get('diagnosis', 'Screening Observation')
+        confidence = data.get('confidence', 'N/A')
+        recommendation = data.get('recommendation', 'Consult an eye specialist')
+        
+        if not question or not str(question).strip():
+            return jsonify({'error': 'Question is required'}), 400
+
+        if not GEMINI_API_KEY:
+            return jsonify({
+                'answer': 'The clinical AI assistant is in offline mode. Please configure GEMINI_API_KEY in backend environment. Reminder: Always consult a licensed ophthalmologist for medical advice.'
+            }), 200
         
         prompt = f"""
-You are an empathetic medical assistant specialized in eye diseases.
+You are an empathetic medical assistant specialized in eye diseases for VitalArc clinical support.
 The patient's AI screening shows: {diagnosis} (Confidence: {confidence}%). 
 Screening Recommendation: {recommendation}
 
@@ -90,15 +100,13 @@ Instructions:
 2. Provide the answer ONLY using a few brief bullet points.
 3. Keep the overall response extremely concise and easy to read.
 4. Gently remind them to consult a real eye doctor for an official diagnosis.
-        """
-        
-        model = genai.GenerativeModel('gemini-flash-latest')
-        response = model.generate_content(prompt)
-        
+"""
+        model_llm = genai.GenerativeModel('gemini-flash-latest')
+        response = model_llm.generate_content(prompt)
         return jsonify({'answer': response.text})
         
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': f'Clinical Assistant error: {str(e)}'}), 500
 
 @app.route('/api/predict', methods=['POST'])
 def predict():

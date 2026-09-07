@@ -8,7 +8,7 @@ on:
 
 jobs:
   frontend-verification:
-    name: Frontend (Lint & Typecheck)
+    name: Frontend (Typecheck, Lint & Build)
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Source Code
@@ -29,8 +29,11 @@ jobs:
       - name: ESLint Code Quality Inspection
         run: npm run lint
 
+      - name: Production Build Verification
+        run: npm run build
+
   backend-verification:
-    name: Backend & ML (Pytest & Lint)
+    name: Backend & ML (Lint & Tests)
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Source Code
@@ -48,17 +51,16 @@ jobs:
           pip install flake8 pytest pytest-cov
           if [ -f backend/requirements.txt ]; then pip install -r backend/requirements.txt; fi
 
-      - name: Syntax & Lint Inspection (Flake8)
+      - name: Syntax & Import Validation (Flake8)
         run: |
-          # Stop build if there are Python syntax errors or undefined names
           flake8 backend --count --select=E9,F63,F7,F82 --show-source --statistics
 
-      - name: Run Pytest Test Suite
+      - name: Run Test Suite
         run: |
-          pytest backend/tests/ -v || echo "Tests passed or skipped"
+          python -m unittest discover backend/tests -v
 
   docker-validation:
-    name: Docker & Compose Validation
+    name: Docker Configuration Validation
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Source Code

@@ -175,7 +175,7 @@ export default function Demo() {
       setResults(processedData);
       
       // Store the analyzed image in localStorage for Data page
-      if (previewUrl && selectedFile) {
+      if (previewUrl) {
         const storedImage = {
           id: Date.now().toString(),
           fileName: selectedFile.name,

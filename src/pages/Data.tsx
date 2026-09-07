@@ -10,6 +10,23 @@ interface StoredImage {
   imageUrl: string;
 }
 
+// Safe image URL sanitization to prevent DOM XSS / reinterpretation
+function getSafeImageUrl(url: string | undefined | null): string {
+  if (!url || typeof url !== 'string') return '';
+  const trimmed = url.trim();
+  if (
+    trimmed.startsWith('data:image/jpeg;base64,') ||
+    trimmed.startsWith('data:image/png;base64,') ||
+    trimmed.startsWith('data:image/webp;base64,') ||
+    trimmed.startsWith('blob:') ||
+    trimmed.startsWith('https://') ||
+    trimmed.startsWith('http://')
+  ) {
+    return trimmed;
+  }
+  return '';
+}
+
 export default function Data() {
   const [storedImages, setStoredImages] = useState<StoredImage[]>([]);
   const [selectedDisease, setSelectedDisease] = useState<string>('all');
@@ -80,9 +97,11 @@ Abnormal Cases: ${storedImages.filter(img => img.disease !== 'Normal').length}
   };
 
   const downloadImage = (image: StoredImage) => {
+    const safeUrl = getSafeImageUrl(image.imageUrl);
+    if (!safeUrl) return;
     const link = document.createElement('a');
-    link.href = image.imageUrl;
-    link.download = `${image.disease}_${image.fileName}`;
+    link.href = safeUrl;
+    link.download = `${image.disease}_${image.fileName.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
     link.click();
   };
 
@@ -266,7 +285,7 @@ Analysis Date: ${new Date(image.timestamp).toLocaleString()}
               <div key={image.id} className="bg-white rounded-2xl shadow-lg overflow-hidden border border-slate-200 hover:shadow-xl transition-all duration-300">
                 <div className="relative group">
                   <img 
-                    src={image.imageUrl} 
+                    src={getSafeImageUrl(image.imageUrl)} 
                     alt={image.fileName}
                     className="w-full h-48 object-cover cursor-pointer"
                     onClick={() => setSelectedImage(image)}
@@ -341,7 +360,7 @@ Analysis Date: ${new Date(image.timestamp).toLocaleString()}
               <div className="grid md:grid-cols-2 gap-6">
                 <div>
                   <img 
-                    src={selectedImage.imageUrl} 
+                    src={getSafeImageUrl(selectedImage.imageUrl)} 
                     alt={selectedImage.fileName}
                     className="w-full rounded-lg shadow-lg"
                   />

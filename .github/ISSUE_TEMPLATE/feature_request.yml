@@ -1,0 +1,36 @@
+name: 💡 Feature Request
+description: Suggest an idea or architectural enhancement for VitalArc
+title: "[FEATURE]: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for helping improve VitalArc! Please describe your proposed feature.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem or Motivation
+      description: Is your feature request related to a specific clinical or technical problem?
+      placeholder: Describe the current limitation or user need...
+    validations:
+      required: true
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed Solution
+      description: A clear description of what you want to happen.
+      placeholder: Proposed architecture or feature flow...
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Target Subsystem
+      options:
+        - ML Inference / Explainability (Grad-CAM, SegFormer)
+        - Clinical RAG & LLM Copilot
+        - Frontend Clinical UI/UX
+        - Infrastructure / CI/CD
+    validations:
+      required: true
